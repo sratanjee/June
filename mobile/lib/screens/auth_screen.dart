@@ -75,14 +75,43 @@ class _AuthScreenState extends State<AuthScreen> {
           email: _emailCtl.text.trim(),
           password: _passwordCtl.text,
         );
+        if (!mounted) return;
+        Navigator.of(context).maybePop();
       } else {
-        await AuthService.signUp(
+        final res = await AuthService.signUp(
           email: _emailCtl.text.trim(),
           password: _passwordCtl.text,
         );
+        if (!mounted) return;
+
+        // Supabase doesn't throw on duplicate email (anti-enumeration). It
+        // returns the user with an empty identities array and no session.
+        // Detect that case and tell the user calmly to sign in instead.
+        final user = res.user;
+        final identities = user?.identities ?? const [];
+        if (res.session == null && identities.isEmpty) {
+          setState(() {
+            _mode = _Mode.signIn;
+            _confirmCtl.clear();
+            _error =
+                "You already have an account with that email. Sign in instead.";
+          });
+          return;
+        }
+
+        // Session created (email confirmation off) — proceed.
+        if (res.session != null) {
+          Navigator.of(context).maybePop();
+          return;
+        }
+
+        // No session yet, but identities non-empty → email confirmation is
+        // on. Stay on this screen and tell them what to expect.
+        setState(() {
+          _error =
+              "Check your email for a confirmation link, then come back and sign in.";
+        });
       }
-      if (!mounted) return;
-      Navigator.of(context).maybePop();
     } on AuthException {
       if (!mounted) return;
       setState(() {

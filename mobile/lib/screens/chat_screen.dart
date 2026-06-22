@@ -9,6 +9,7 @@ import '../models/chat.dart';
 import '../models/entry.dart';
 import '../storage/local_store.dart';
 import '../theme.dart';
+import '../widgets/brand_mark.dart';
 
 // Full-screen chat surface for talking to june. Mirrors the context-building
 // pattern in CheckInScreen so the backend gets the same snapshot it's already
@@ -292,49 +293,55 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 20, 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          GestureDetector(
-            onTap: onBack,
-            behavior: HitTestBehavior.opaque,
-            child: const Padding(
-              padding: EdgeInsets.symmetric(vertical: 6, horizontal: 2),
-              child: Icon(Icons.arrow_back_rounded,
-                  size: 22, color: JuneColors.inkNavy),
+    return Container(
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: JuneColors.hairline)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(8, 4, 20, 10),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            GestureDetector(
+              onTap: onBack,
+              behavior: HitTestBehavior.opaque,
+              child: const Padding(
+                padding: EdgeInsets.all(10),
+                child: Icon(Icons.arrow_back_rounded,
+                    size: 22, color: JuneColors.inkNavy),
+              ),
             ),
-          ),
-          const SizedBox(height: 4),
-          Padding(
-            padding: const EdgeInsets.only(left: 4),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'chat with june',
-                  style: GoogleFonts.lora(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w500,
-                    color: JuneColors.inkNavy,
-                    letterSpacing: -0.3,
-                    height: 1.15,
+            const SizedBox(width: 2),
+            const JBrandMark(size: 28),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'june',
+                    style: GoogleFonts.lora(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w500,
+                      color: JuneColors.inkNavy,
+                      letterSpacing: -0.2,
+                      height: 1.1,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  date,
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    color: JuneColors.neutralMuted,
-                    fontWeight: FontWeight.w500,
+                  const SizedBox(height: 2),
+                  Text(
+                    date,
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: JuneColors.neutralMuted,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

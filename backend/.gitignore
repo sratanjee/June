@@ -3,3 +3,5 @@ dist/
 .env
 *.log
 .DS_Store
+# Copied in from repo root before `fly deploy` (see DEPLOY.md). Never commit.
+June_Personality_Spec.md

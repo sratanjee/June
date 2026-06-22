@@ -132,7 +132,14 @@ export async function registerChatRoutes(
       const stream = client.messages.stream({
         model: MODEL,
         max_tokens: MAX_TOKENS,
-        system: opts.systemPrompt,
+        // Cache the §10 chat system prompt — stable across every call.
+        system: [
+          {
+            type: "text",
+            text: opts.systemPrompt,
+            cache_control: { type: "ephemeral" },
+          },
+        ],
         messages,
       });
 

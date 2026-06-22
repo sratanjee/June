@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../models/entry.dart';
 import '../storage/local_store.dart';
 import '../theme.dart';
+import '../widgets/brand_mark.dart';
 import 'accounts_screen.dart';
 import 'chat_screen.dart';
 import 'checkin_screen.dart';
@@ -24,6 +25,12 @@ class _EntryScreenState extends State<EntryScreen> {
   List<PaycheckEntry> _paychecks = [];
   String? _userName;
   bool _loaded = false;
+
+  // Collapse/expand per section. Defaults to expanded — first-time users
+  // should see their data without an extra tap.
+  bool _accountsOpen = true;
+  bool _paychecksOpen = true;
+  bool _goalsOpen = true;
 
   @override
   void initState() {
@@ -94,15 +101,13 @@ class _EntryScreenState extends State<EntryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final today = DateFormat('EEEE d MMMM').format(DateTime.now()).toLowerCase();
-
     return Scaffold(
       body: SafeArea(
         bottom: false,
         child: Column(
           children: [
             _TopBar(
-              date: today,
+              userName: _userName,
               onChat: () {
                 Navigator.of(context).push(
                   MaterialPageRoute(
@@ -134,134 +139,134 @@ class _EntryScreenState extends State<EntryScreen> {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'A few accounts and a goal or two is enough to start. Add what feels right — nothing is permanent.',
+                    'A few accounts and a goal — June takes it from there.',
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                           color: JuneColors.neutralMuted,
                           height: 1.55,
                         ),
                   ),
                   const SizedBox(height: 14),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
+                  Row(
                     children: [
-                      TextButton.icon(
-                        onPressed: _loaded ? _loadSample : null,
-                        icon:
-                            const Icon(Icons.auto_fix_high_outlined, size: 16),
-                        label: const Text('Try with sample data'),
-                        style: TextButton.styleFrom(
-                          foregroundColor: JuneColors.inkNavy,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 6),
-                          textStyle: GoogleFonts.inter(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            side: const BorderSide(color: JuneColors.hairline),
-                          ),
+                      Expanded(
+                        child: _EntryChip(
+                          icon: Icons.auto_fix_high_outlined,
+                          label: 'Sample data',
+                          onTap: _loaded ? _loadSample : null,
                         ),
                       ),
-                      TextButton.icon(
-                        onPressed: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const LinkAccountScreen(),
-                            ),
-                          );
-                        },
-                        icon: const Icon(Icons.link_rounded, size: 16),
-                        label: const Text('Link a bank instead'),
-                        style: TextButton.styleFrom(
-                          foregroundColor: JuneColors.inkNavy,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 6),
-                          textStyle: GoogleFonts.inter(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            side: const BorderSide(color: JuneColors.hairline),
-                          ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _EntryChip(
+                          icon: Icons.link_rounded,
+                          label: 'Link a bank',
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const LinkAccountScreen(),
+                              ),
+                            );
+                          },
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 24),
                   _SectionHeader(
                     eyebrow: 'accounts',
                     count: _accounts.length,
+                    expanded: _accountsOpen,
+                    onToggle: () =>
+                        setState(() => _accountsOpen = !_accountsOpen),
                     onAdd: () async {
                       final entry = await _editAccount(context);
                       if (entry != null) {
-                        setState(() => _accounts.add(entry));
+                        setState(() {
+                          _accounts.add(entry);
+                          _accountsOpen = true;
+                        });
                         _persist();
                       }
                     },
                   ),
-                  const SizedBox(height: 14),
-                  if (_accounts.isEmpty)
-                    const _EmptyCard(
-                      icon: Icons.account_balance_wallet_outlined,
-                      text:
-                          'Add a checking, savings, or credit card. Balances stay on this device for now.',
-                    )
-                  else
-                    ..._accounts.map((a) => Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: _AccountTile(entry: a),
-                        )),
-                  const SizedBox(height: 36),
+                  if (_accountsOpen) ...[
+                    const SizedBox(height: 10),
+                    if (_accounts.isEmpty)
+                      const _EmptyCard(
+                        icon: Icons.account_balance_wallet_outlined,
+                        text:
+                            'Add a checking, savings, or credit card.',
+                      )
+                    else
+                      ..._accounts.map((a) => Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: _AccountTile(entry: a),
+                          )),
+                  ],
+                  const SizedBox(height: 24),
                   _SectionHeader(
                     eyebrow: 'paychecks',
                     count: _paychecks.length,
+                    expanded: _paychecksOpen,
+                    onToggle: () =>
+                        setState(() => _paychecksOpen = !_paychecksOpen),
                     onAdd: () async {
                       final entry = await _editPaycheck(context);
                       if (entry != null) {
-                        setState(() => _paychecks.add(entry));
+                        setState(() {
+                          _paychecks.add(entry);
+                          _paychecksOpen = true;
+                        });
                         _persist();
                       }
                     },
                   ),
-                  const SizedBox(height: 14),
-                  if (_paychecks.isEmpty)
-                    const _EmptyCard(
-                      icon: Icons.calendar_today_outlined,
-                      text:
-                          'Optional but recommended. Telling me when payday is helps June reason about timing balances.',
-                    )
-                  else
-                    ..._paychecks.map((p) => Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: _PaycheckTile(entry: p),
-                        )),
-                  const SizedBox(height: 36),
+                  if (_paychecksOpen) ...[
+                    const SizedBox(height: 10),
+                    if (_paychecks.isEmpty)
+                      const _EmptyCard(
+                        icon: Icons.calendar_today_outlined,
+                        text:
+                            'Optional. Telling me when payday is helps June reason about timing.',
+                      )
+                    else
+                      ..._paychecks.map((p) => Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: _PaycheckTile(entry: p),
+                          )),
+                  ],
+                  const SizedBox(height: 24),
                   _SectionHeader(
                     eyebrow: 'goals',
                     count: _goals.length,
+                    expanded: _goalsOpen,
+                    onToggle: () =>
+                        setState(() => _goalsOpen = !_goalsOpen),
                     onAdd: () async {
                       final entry = await _editGoal(context);
                       if (entry != null) {
-                        setState(() => _goals.add(entry));
+                        setState(() {
+                          _goals.add(entry);
+                          _goalsOpen = true;
+                        });
                         _persist();
                       }
                     },
                   ),
-                  const SizedBox(height: 14),
-                  if (_goals.isEmpty)
-                    const _EmptyCard(
-                      icon: Icons.flag_outlined,
-                      text:
-                          'Optional. One savings or debt goal helps me say something useful.',
-                    )
-                  else
-                    ..._goals.map((g) => Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: _GoalTile(entry: g),
-                        )),
+                  if (_goalsOpen) ...[
+                    const SizedBox(height: 10),
+                    if (_goals.isEmpty)
+                      const _EmptyCard(
+                        icon: Icons.flag_outlined,
+                        text:
+                            'Optional. A savings or debt goal helps me say something useful.',
+                      )
+                    else
+                      ..._goals.map((g) => Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: _GoalTile(entry: g),
+                          )),
+                  ],
                 ],
               ),
             ),
@@ -313,78 +318,59 @@ class _EntryScreenState extends State<EntryScreen> {
       );
 }
 
+String _greetingForNow() {
+  final h = DateTime.now().hour;
+  if (h < 12) return 'Good morning';
+  if (h < 18) return 'Good afternoon';
+  return 'Good evening';
+}
+
 class _TopBar extends StatelessWidget {
-  final String date;
+  final String? userName;
   final VoidCallback onChat;
   final VoidCallback onAccounts;
   const _TopBar({
-    required this.date,
+    required this.userName,
     required this.onChat,
     required this.onAccounts,
   });
 
   @override
   Widget build(BuildContext context) {
+    final name = (userName == null || userName!.trim().isEmpty)
+        ? null
+        : userName!.trim().split(' ').first;
+    final greeting =
+        name == null ? _greetingForNow() : '${_greetingForNow()}, $name';
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+      padding: const EdgeInsets.fromLTRB(20, 12, 14, 4),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Container(
-            width: 28,
-            height: 28,
-            decoration: const BoxDecoration(
-              color: JuneColors.inkNavy,
-              shape: BoxShape.circle,
-            ),
-            alignment: Alignment.center,
+          const JBrandMark(size: 28),
+          const SizedBox(width: 12),
+          Expanded(
             child: Text(
-              'j',
+              greeting,
+              overflow: TextOverflow.ellipsis,
               style: GoogleFonts.lora(
-                fontSize: 15,
+                fontSize: 17,
                 fontWeight: FontWeight.w500,
-                color: JuneColors.paper,
-                height: 1,
+                color: JuneColors.inkNavy,
+                letterSpacing: -0.2,
               ),
             ),
           ),
-          const SizedBox(width: 10),
-          Text(
-            'june',
-            style: GoogleFonts.lora(
-              fontSize: 18,
-              fontWeight: FontWeight.w500,
-              color: JuneColors.inkNavy,
-              letterSpacing: -0.2,
-            ),
-          ),
-          const Spacer(),
           _IconBtn(
             icon: Icons.chat_bubble_outline_rounded,
             tooltip: 'Chat with june',
             onTap: onChat,
           ),
-          const SizedBox(width: 6),
           _IconBtn(
             icon: Icons.tune_rounded,
             tooltip: 'Manage accounts',
             onTap: onAccounts,
-          ),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: JuneColors.paperShade,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              date,
-              style: GoogleFonts.inter(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: JuneColors.neutralMuted,
-              ),
-            ),
           ),
         ],
       ),
@@ -421,10 +407,14 @@ class _IconBtn extends StatelessWidget {
 class _SectionHeader extends StatelessWidget {
   final String eyebrow;
   final int count;
+  final bool expanded;
+  final VoidCallback onToggle;
   final VoidCallback onAdd;
   const _SectionHeader({
     required this.eyebrow,
     required this.count,
+    required this.expanded,
+    required this.onToggle,
     required this.onAdd,
   });
 
@@ -432,52 +422,63 @@ class _SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Text(
-          eyebrow.toUpperCase(),
-          style: Theme.of(context).textTheme.labelMedium,
-        ),
-        const SizedBox(width: 10),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: JuneColors.paperShade,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Text(
-            '$count',
-            style: GoogleFonts.inter(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: JuneColors.neutralMuted,
-            ),
-          ),
-        ),
-        const Spacer(),
-        InkWell(
-          onTap: onAdd,
-          borderRadius: BorderRadius.circular(10),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              color: JuneColors.inkNavy,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.add_rounded,
-                    color: JuneColors.paper, size: 16),
-                const SizedBox(width: 4),
-                Text(
-                  'Add',
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: JuneColors.paper,
+        Expanded(
+          child: InkWell(
+            onTap: onToggle,
+            borderRadius: BorderRadius.circular(6),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Row(
+                children: [
+                  Text(
+                    eyebrow.toUpperCase(),
+                    style: Theme.of(context).textTheme.labelMedium,
                   ),
-                ),
-              ],
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 6, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: JuneColors.paperShade,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      '$count',
+                      style: GoogleFonts.inter(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: JuneColors.neutralMuted,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  AnimatedRotation(
+                    turns: expanded ? 0 : -0.25,
+                    duration: const Duration(milliseconds: 180),
+                    child: const Icon(
+                      Icons.expand_more_rounded,
+                      size: 16,
+                      color: JuneColors.neutralMuted,
+                    ),
+                  ),
+                ],
+              ),
             ),
+          ),
+        ),
+        InkResponse(
+          onTap: onAdd,
+          radius: 20,
+          child: Container(
+            width: 26,
+            height: 26,
+            decoration: const BoxDecoration(
+              color: JuneColors.inkNavy,
+              shape: BoxShape.circle,
+            ),
+            alignment: Alignment.center,
+            child: const Icon(Icons.add_rounded,
+                color: JuneColors.paper, size: 14),
           ),
         ),
       ],
@@ -509,9 +510,9 @@ class _EmptyCard extends StatelessWidget {
               color: JuneColors.paper,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(icon, color: JuneColors.inkNavy, size: 20),
+            child: Icon(icon, color: JuneColors.inkNavy, size: 16),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 10),
           Expanded(
             child: Padding(
               padding: const EdgeInsets.only(top: 4),
@@ -562,7 +563,7 @@ class _AccountTile extends StatelessWidget {
     final v = _accountVisuals(entry.type);
     final formatted = NumberFormat.decimalPattern().format(dollars.abs());
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 14, 18, 14),
+      padding: const EdgeInsets.fromLTRB(10, 8, 12, 8),
       decoration: BoxDecoration(
         color: JuneColors.card,
         borderRadius: BorderRadius.circular(10),
@@ -571,15 +572,15 @@ class _AccountTile extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            width: 44,
-            height: 44,
+            width: 32,
+            height: 32,
             decoration: BoxDecoration(
               color: v.tint,
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(v.icon, color: JuneColors.inkNavy, size: 22),
+            child: Icon(v.icon, color: JuneColors.inkNavy, size: 16),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -595,7 +596,7 @@ class _AccountTile extends StatelessWidget {
           Text(
             '${dollars < 0 ? '-' : ''}\$$formatted',
             style: GoogleFonts.lora(
-              fontSize: 17,
+              fontSize: 14,
               fontWeight: FontWeight.w500,
               color: JuneColors.inkNavy,
               letterSpacing: -0.4,
@@ -617,7 +618,7 @@ class _GoalTile extends StatelessWidget {
     final v = _goalVisuals(entry.kind);
     final formatted = NumberFormat.decimalPattern().format(dollars);
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 14, 18, 14),
+      padding: const EdgeInsets.fromLTRB(10, 8, 12, 8),
       decoration: BoxDecoration(
         color: JuneColors.card,
         borderRadius: BorderRadius.circular(10),
@@ -626,15 +627,15 @@ class _GoalTile extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            width: 44,
-            height: 44,
+            width: 32,
+            height: 32,
             decoration: BoxDecoration(
               color: v.tint,
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(v.icon, color: JuneColors.inkNavy, size: 22),
+            child: Icon(v.icon, color: JuneColors.inkNavy, size: 16),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -650,7 +651,7 @@ class _GoalTile extends StatelessWidget {
           Text(
             '\$$formatted',
             style: GoogleFonts.lora(
-              fontSize: 17,
+              fontSize: 14,
               fontWeight: FontWeight.w500,
               color: JuneColors.inkNavy,
               letterSpacing: -0.4,
@@ -674,7 +675,7 @@ class _PaycheckTile extends StatelessWidget {
         DateFormat('EEE, MMM d').format(entry.date).toLowerCase();
     final cadence = entry.recurrence?.label ?? 'One-time';
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 14, 18, 14),
+      padding: const EdgeInsets.fromLTRB(10, 8, 12, 8),
       decoration: BoxDecoration(
         color: JuneColors.card,
         borderRadius: BorderRadius.circular(10),
@@ -683,16 +684,16 @@ class _PaycheckTile extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            width: 44,
-            height: 44,
+            width: 32,
+            height: 32,
             decoration: BoxDecoration(
               color: JuneColors.sageSurface,
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Icon(Icons.calendar_today_outlined,
-                color: JuneColors.inkNavy, size: 20),
+                color: JuneColors.inkNavy, size: 16),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -708,7 +709,7 @@ class _PaycheckTile extends StatelessWidget {
           Text(
             '\$$formatted',
             style: GoogleFonts.lora(
-              fontSize: 17,
+              fontSize: 14,
               fontWeight: FontWeight.w500,
               color: JuneColors.inkNavy,
               letterSpacing: -0.4,
@@ -739,7 +740,7 @@ class _BottomCta extends StatelessWidget {
           child: FilledButton.icon(
             onPressed: enabled ? onTap : null,
             icon: const Icon(Icons.auto_awesome_outlined, size: 18),
-            label: const Text("Generate today's check-in"),
+            label: const Text("Generate your check-in"),
           ),
         ),
       ),
@@ -1170,6 +1171,53 @@ class _SegmentedTypeSelector<T> extends StatelessWidget {
             ),
           );
         }).toList(),
+      ),
+    );
+  }
+}
+
+class _EntryChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+  const _EntryChip({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final disabled = onTap == null;
+    final color =
+        disabled ? JuneColors.neutralMuted : JuneColors.inkNavy;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: JuneColors.hairline),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 15, color: color),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                label,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: color,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

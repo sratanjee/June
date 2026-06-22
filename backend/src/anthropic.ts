@@ -22,10 +22,19 @@ export async function generateCheckIn(
     JSON.stringify(financialContext, null, 2),
   ].join("\n");
 
+  // Prompt caching on the system prompt — the §9 block is ~1k tokens of stable
+  // text reused across every call. Anthropic charges 90% less on cache hits and
+  // 25% more on the write; net win after the first call of the 5-min TTL window.
   const res = await client.messages.create({
     model: MODEL,
     max_tokens: 2048,
-    system: systemPrompt,
+    system: [
+      {
+        type: "text",
+        text: systemPrompt,
+        cache_control: { type: "ephemeral" },
+      },
+    ],
     messages: [{ role: "user", content: userMessage }],
   });
 
