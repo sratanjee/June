@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:plaid_flutter/plaid_flutter.dart';
 
 import '../api/june_client.dart';
+import '../storage/local_store.dart';
 import '../theme.dart';
 
 // NOTE: For Plaid Sandbox on iOS this screen needs no extra Info.plist entries.
@@ -76,8 +77,18 @@ class _LinkAccountScreenState extends State<LinkAccountScreen> {
       if (!mounted) return;
       setState(() => _status = _Status.syncing);
       await _client.plaidSync(userId: demoUserId);
+      // Now that exchange + initial sync succeeded, flip the persistent flag
+      // so the rest of the app (checkin, chat) routes through the
+      // Plaid-aware backend path.
+      await LocalStore.saveHasLinkedBank(true);
       if (!mounted) return;
       setState(() => _status = _Status.done);
+      // Brief calm hold on the success state, then close the screen so the
+      // user lands back where they started (usually AccountsScreen, which
+      // re-hydrates on resume).
+      await Future.delayed(const Duration(milliseconds: 900));
+      if (!mounted) return;
+      Navigator.of(context).maybePop();
     } catch (err) {
       if (!mounted) return;
       setState(() {
@@ -137,8 +148,8 @@ class _LinkAccountScreenState extends State<LinkAccountScreen> {
               if (_status == _Status.done)
                 _StatusCard(
                   tint: JuneColors.sageSurface,
-                  title: 'Linked.',
-                  detail: 'Your accounts are syncing. Head back to see them.',
+                  title: 'Connected.',
+                  detail: 'Your numbers should land in a moment.',
                 )
               else if (_status == _Status.error && _errorCopy != null)
                 _StatusCard(

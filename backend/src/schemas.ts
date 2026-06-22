@@ -86,7 +86,11 @@ export const InlineFinancialContext = z.object({
 
 export const GenerateCheckInRequest = z.object({
   today: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  context: InlineFinancialContext,
+  // Optional: when an authenticated user calls without a context, the route
+  // loads it from the DB. Legacy demo-user callers MUST still pass it inline.
+  context: InlineFinancialContext.optional(),
+  // Legacy demo-user path (Phase 0). Authenticated path uses req.user.id.
+  user_id: z.string().uuid().optional(),
 });
 
 export const CheckInResponse = z.object({
@@ -132,9 +136,11 @@ export const ChatMessage = z.object({
 });
 
 export const ChatRequest = z.object({
-  user_id: z.string().uuid(),
+  // Legacy demo-user path requires user_id. Authenticated path uses req.user.id.
+  user_id: z.string().uuid().optional(),
   today: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  context: InlineFinancialContext,
+  // Optional: authenticated callers may omit and have it loaded from the DB.
+  context: InlineFinancialContext.optional(),
   history: z.array(ChatMessage).default([]),
   message: z.string().min(1).max(4000),
 });

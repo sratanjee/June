@@ -38,11 +38,14 @@ class _CheckInScreenState extends State<CheckInScreen> {
     _future = _fetch();
   }
 
-  Future<CheckIn> _fetch() {
+  Future<CheckIn> _fetch() async {
     final client = JuneClient();
+    // Once a Plaid link exists, the backend has the canonical snapshot. Send
+    // a null context so it loads from DB instead of using a stale local one.
+    final hasLinkedBank = await LocalStore.loadHasLinkedBank();
     return client.generateCheckIn(
       today: DateTime.now(),
-      context: _buildContext(),
+      context: hasLinkedBank ? null : _buildContext(),
     );
   }
 

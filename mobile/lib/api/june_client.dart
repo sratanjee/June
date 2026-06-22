@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
+import '../auth/auth_service.dart';
 import '../models/chat.dart';
 import '../models/checkin.dart';
 
@@ -26,19 +27,38 @@ class JuneClient {
   final String baseUrl;
   JuneClient({String? baseUrl}) : baseUrl = baseUrl ?? _defaultBase();
 
+  // Returns content-type plus, if a Supabase session exists, an
+  // `Authorization: Bearer <jwt>` header. The backend uses the JWT to identify
+  // the user and load their persisted context.
+  Map<String, String> _authHeaders({Map<String, String>? extra}) {
+    final headers = <String, String>{'content-type': 'application/json'};
+    final session = AuthService.currentSession;
+    if (session != null) {
+      headers['authorization'] = 'Bearer ${session.accessToken}';
+    }
+    if (extra != null) headers.addAll(extra);
+    return headers;
+  }
+
   Future<CheckIn> generateCheckIn({
     required DateTime today,
-    required Map<String, dynamic> context,
+    required Map<String, dynamic>? context,
   }) async {
     final url = Uri.parse('$baseUrl/checkin/generate');
+    final body = <String, dynamic>{
+      'today':
+          '${today.year.toString().padLeft(4, '0')}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}',
+    };
+    // Null context means "load from DB" — omit the key so the backend doesn't
+    // see a stale local snapshot. Pass an explicit empty map if you really
+    // want an empty context.
+    if (context != null) {
+      body['context'] = context;
+    }
     final res = await http.post(
       url,
-      headers: const {'content-type': 'application/json'},
-      body: jsonEncode({
-        'today':
-            '${today.year.toString().padLeft(4, '0')}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}',
-        'context': context,
-      }),
+      headers: _authHeaders(),
+      body: jsonEncode(body),
     );
 
     if (res.statusCode != 200) {
@@ -49,6 +69,20 @@ class JuneClient {
     return CheckIn.fromJson(json);
   }
 
+  // ---------------- Account ----------------
+
+  // POSTs to /account/delete. Requires an auth session — the backend uses the
+  // JWT to identify the user whose data should be wiped.
+  Future<void> deleteMyData() async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/account/delete'),
+      headers: _authHeaders(),
+    );
+    if (res.statusCode != 200) {
+      throw JuneApiException(res.statusCode, res.body);
+    }
+  }
+
   // ---------------- Plaid ----------------
 
   Future<({String linkToken, String expiration})> plaidLinkToken({
@@ -56,7 +90,7 @@ class JuneClient {
   }) async {
     final res = await http.post(
       Uri.parse('$baseUrl/plaid/link-token'),
-      headers: const {'content-type': 'application/json'},
+      headers: _authHeaders(),
       body: jsonEncode({'user_id': userId}),
     );
     if (res.statusCode != 200) {
@@ -75,7 +109,7 @@ class JuneClient {
   }) async {
     final res = await http.post(
       Uri.parse('$baseUrl/plaid/exchange'),
-      headers: const {'content-type': 'application/json'},
+      headers: _authHeaders(),
       body: jsonEncode({'user_id': userId, 'public_token': publicToken}),
     );
     if (res.statusCode != 200) {
@@ -86,7 +120,7 @@ class JuneClient {
   Future<void> plaidSync({required String userId}) async {
     final res = await http.post(
       Uri.parse('$baseUrl/plaid/sync'),
-      headers: const {'content-type': 'application/json'},
+      headers: _authHeaders(),
       body: jsonEncode({'user_id': userId}),
     );
     if (res.statusCode != 200) {
@@ -107,7 +141,7 @@ class JuneClient {
   Stream<ChatStreamEvent> streamChat({
     required String userId,
     required DateTime today,
-    required Map<String, dynamic> context,
+    required Map<String, dynamic>? context,
     required List<ChatMessage> history,
     required String message,
   }) async* {
@@ -120,13 +154,13 @@ class JuneClient {
     Future<void> run() async {
       try {
         final req = http.Request('POST', Uri.parse('$baseUrl/chat'));
-        req.headers['content-type'] = 'application/json';
-        req.headers['accept'] = 'text/event-stream';
-        req.body = jsonEncode({
+        // SSE-specific header layered on top of the standard auth headers.
+        _authHeaders(extra: {'accept': 'text/event-stream'})
+            .forEach((k, v) => req.headers[k] = v);
+        final body = <String, dynamic>{
           'user_id': userId,
           'today':
               '${today.year.toString().padLeft(4, '0')}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}',
-          'context': context,
           'history': history
               .map((m) => {
                     'role': m.role == ChatRole.user ? 'user' : 'assistant',
@@ -134,7 +168,13 @@ class JuneClient {
                   })
               .toList(),
           'message': message,
-        });
+        };
+        // Mirror generateCheckIn: omit `context` entirely when null so the
+        // backend loads from DB.
+        if (context != null) {
+          body['context'] = context;
+        }
+        req.body = jsonEncode(body);
 
         final res = await client.send(req);
         if (res.statusCode != 200) {

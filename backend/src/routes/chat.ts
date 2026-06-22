@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import Anthropic from "@anthropic-ai/sdk";
 import { ChatRequest } from "../schemas.js";
+import { loadFinancialContext } from "../db.js";
 
 const MODEL = "claude-opus-4-7";
 const MAX_TOKENS = 2048;
@@ -27,7 +28,61 @@ export async function registerChatRoutes(
       });
     }
 
-    const { today, context, history, message } = parsed.data;
+    const { today, history, message } = parsed.data;
+    let context = parsed.data.context;
+
+    // Auth-aware: derive user_id from JWT when present; else legacy body.user_id.
+    const authedUserId = req.user?.id ?? null;
+
+    if (parsed.data.user_id && authedUserId) {
+      req.log.warn("deprecated: body.user_id passed alongside JWT; using JWT");
+    }
+
+    // If context missing/empty and we have an authenticated user, load from DB.
+    const contextEmpty = !context || context.accounts.length === 0;
+    if (contextEmpty) {
+      if (!authedUserId) {
+        return reply.code(400).send({
+          standing:
+            "I need either a signed-in session or a context block. Sign in or include your context inline.",
+        });
+      }
+
+      const loaded = await loadFinancialContext(authedUserId);
+      context = {
+        accounts: loaded.accounts.map((a) => ({
+          name: a.name,
+          type: a.type,
+          balance_cents: a.balance_cents,
+        })),
+        cards: loaded.cards.map((c) => ({
+          account_name: c.account_id,
+          statement_close_date: c.statement_close_date,
+          due_date: c.due_date,
+          statement_balance_cents: c.statement_balance_cents,
+          current_balance_cents: c.current_balance_cents,
+        })),
+        transactions: loaded.transactions.map((t) => ({
+          date: t.date,
+          description: t.description,
+          amount_cents: t.amount_cents,
+          category: t.category,
+          pending: t.pending,
+        })),
+        goals: loaded.goals.map((g) => ({
+          label: g.label,
+          target_amount_cents: g.target_amount_cents,
+          target_date: g.target_date,
+          kind: g.kind,
+          priority: g.priority,
+        })),
+        budget_targets: loaded.budget_targets.map((b) => ({
+          category: b.category,
+          monthly_amount_cents: b.monthly_amount_cents,
+        })),
+        paychecks: [],
+      };
+    }
 
     // Build the Anthropic messages array.
     // - If history is empty, the new message is the FIRST user turn and carries

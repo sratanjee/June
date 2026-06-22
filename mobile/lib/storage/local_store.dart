@@ -15,6 +15,7 @@ class LocalStore {
   static const _kGoals = 'june.goals';
   static const _kPaychecks = 'june.paychecks';
   static const _kUserName = 'june.user_name';
+  static const _kHasLinkedBank = 'june.has_linked_bank';
 
   static String _dateToIso(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}-'
@@ -161,6 +162,19 @@ class LocalStore {
     await prefs.setString(_kUserName, name.trim());
   }
 
+  /// Whether the user has completed a successful Plaid Link flow. When true,
+  /// the mobile app should let the backend load the user's snapshot from DB
+  /// instead of sending an inline context built from local entries.
+  static Future<bool> loadHasLinkedBank() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_kHasLinkedBank) ?? false;
+  }
+
+  static Future<void> saveHasLinkedBank(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kHasLinkedBank, value);
+  }
+
   /// Clears all known June keys. Dev convenience only.
   static Future<void> clear() async {
     final prefs = await SharedPreferences.getInstance();
@@ -168,6 +182,7 @@ class LocalStore {
     await prefs.remove(_kGoals);
     await prefs.remove(_kPaychecks);
     await prefs.remove(_kUserName);
+    await prefs.remove(_kHasLinkedBank);
   }
 }
 

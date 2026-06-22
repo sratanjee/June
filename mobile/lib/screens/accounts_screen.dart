@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
+import '../api/june_client.dart';
 import '../auth/auth_service.dart';
 import '../models/entry.dart';
 import '../storage/local_store.dart';
@@ -111,6 +112,70 @@ class _AccountsScreenState extends State<AccountsScreen> {
     } catch (_) {
       // _Boot listens to auth state changes; if sign-out throws there's not
       // much we can do here beyond leaving the user on this screen.
+    }
+  }
+
+  Future<void> _confirmDeleteMyData() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: JuneColors.paper,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+        ),
+        title: Text(
+          'Delete everything?',
+          style: Theme.of(ctx).textTheme.headlineMedium,
+        ),
+        content: Text(
+          "This removes every account, goal, paycheck, and check-in June has on you. You can't undo it.",
+          style: Theme.of(ctx).textTheme.bodyLarge?.copyWith(
+                color: JuneColors.neutralMuted,
+                height: 1.45,
+              ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            style: TextButton.styleFrom(
+              foregroundColor: JuneColors.neutralMuted,
+            ),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: JuneColors.amber,
+              foregroundColor: JuneColors.paper,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await JuneClient().deleteMyData();
+      // Local cleanup first so a partially-signed-out state can't leave stale
+      // entries behind.
+      await LocalStore.clear();
+      await AuthService.signOut();
+      // _Boot routes back to AuthScreen on the auth-state-change broadcast.
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: JuneColors.inkNavy,
+          content: Text(
+            "Couldn't delete just now. Try again in a moment.",
+            style: GoogleFonts.inter(
+              fontSize: 13,
+              color: JuneColors.paper,
+            ),
+          ),
+        ),
+      );
     }
   }
 
@@ -225,6 +290,8 @@ class _AccountsScreenState extends State<AccountsScreen> {
         enabled: _loaded,
         onTap: _openLinkBank,
         onSignOut: AuthService.configured ? _confirmSignOut : null,
+        onDeleteMyData:
+            AuthService.configured ? _confirmDeleteMyData : null,
       ),
     );
   }
@@ -590,10 +657,12 @@ class _BottomCta extends StatelessWidget {
   final bool enabled;
   final VoidCallback onTap;
   final VoidCallback? onSignOut;
+  final VoidCallback? onDeleteMyData;
   const _BottomCta({
     required this.enabled,
     required this.onTap,
     this.onSignOut,
+    this.onDeleteMyData,
   });
 
   @override
@@ -638,8 +707,57 @@ class _BottomCta extends StatelessWidget {
                   ),
                 ),
               ],
+              if (onDeleteMyData != null)
+                _DeleteMyDataButton(
+                  enabled: enabled,
+                  onTap: onDeleteMyData!,
+                ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// Muted at rest, coral on press — keeps the "danger" visual subordinate to
+// Link / Sign out so it doesn't shout from the screen.
+class _DeleteMyDataButton extends StatelessWidget {
+  final bool enabled;
+  final VoidCallback onTap;
+  const _DeleteMyDataButton({required this.enabled, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    // Resolve the foreground color from the WidgetState so the icon + label
+    // both pick up the press transition without a manual StatefulWidget.
+    final fg = WidgetStateProperty.resolveWith<Color>((states) {
+      if (states.contains(WidgetState.pressed)) return JuneColors.amber;
+      if (states.contains(WidgetState.disabled)) {
+        return JuneColors.neutralMuted.withValues(alpha: 0.5);
+      }
+      return JuneColors.neutralMuted;
+    });
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: TextButton.icon(
+        onPressed: enabled ? onTap : null,
+        icon: const Icon(Icons.delete_outline_rounded, size: 16),
+        label: Text(
+          'Delete my data',
+          style: GoogleFonts.inter(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        style: ButtonStyle(
+          foregroundColor: fg,
+          iconColor: fg,
+          overlayColor: WidgetStatePropertyAll(
+            JuneColors.amberSurface.withValues(alpha: 0.5),
+          ),
+          minimumSize:
+              const WidgetStatePropertyAll(Size.fromHeight(36)),
         ),
       ),
     );

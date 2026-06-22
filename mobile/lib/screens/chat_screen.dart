@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../api/june_client.dart';
 import '../models/chat.dart';
 import '../models/entry.dart';
+import '../storage/local_store.dart';
 import '../theme.dart';
 
 // Full-screen chat surface for talking to june. Mirrors the context-building
@@ -39,6 +40,9 @@ class _ChatScreenState extends State<ChatScreen> {
   // True once june has replied at least once — used to keep quick-reply chips
   // available after the empty state goes away.
   bool _hasJuneReply = false;
+  // Lazily filled from LocalStore; null = unknown so we fall back to the
+  // locally-built context (safe) until we know.
+  bool _hasLinkedBank = false;
 
   static const _quickReplies = <String>[
     'How am I doing?',
@@ -54,6 +58,13 @@ class _ChatScreenState extends State<ChatScreen> {
       // Rebuild so the send button enables/disables as the field fills.
       setState(() {});
     });
+    _hydrateLinkedFlag();
+  }
+
+  Future<void> _hydrateLinkedFlag() async {
+    final v = await LocalStore.loadHasLinkedBank();
+    if (!mounted) return;
+    setState(() => _hasLinkedBank = v);
   }
 
   @override
@@ -157,7 +168,9 @@ class _ChatScreenState extends State<ChatScreen> {
         .streamChat(
       userId: demoUserId,
       today: DateTime.now(),
-      context: _buildContext(),
+      // When a bank is linked the backend owns the canonical snapshot; send
+      // null so it loads from DB rather than the stale local entries.
+      context: _hasLinkedBank ? null : _buildContext(),
       history: history,
       message: text,
     )

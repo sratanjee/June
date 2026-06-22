@@ -6,6 +6,7 @@ import { registerAuth } from "./auth.js";
 import { registerCheckInRoutes } from "./routes/checkin.js";
 import { registerPlaidRoutes } from "./routes/plaid.js";
 import { registerChatRoutes } from "./routes/chat.js";
+import { registerAccountRoutes } from "./routes/account.js";
 
 async function main() {
   const systemPrompt = await loadSystemPrompt();
@@ -23,6 +24,7 @@ async function main() {
   await registerCheckInRoutes(app, { systemPrompt });
   await registerPlaidRoutes(app, { systemPrompt });
   await registerChatRoutes(app, { systemPrompt });
+  await registerAccountRoutes(app);
 
   const port = Number(process.env.PORT ?? 4000);
   const host = process.env.HOST ?? "0.0.0.0";

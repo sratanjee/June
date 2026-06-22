@@ -21,9 +21,11 @@ import {
 
 // ---------- request schemas ----------
 
-const UserIdBody = z.object({ user_id: z.string().uuid() });
+// user_id is now optional on the body — preferred source is req.user.id from
+// the JWT. Kept for backward compatibility this pass; remove in Phase 4.
+const UserIdBody = z.object({ user_id: z.string().uuid().optional() });
 const ExchangeBody = z.object({
-  user_id: z.string().uuid(),
+  user_id: z.string().uuid().optional(),
   public_token: z.string().min(1),
 });
 
@@ -283,15 +285,25 @@ export async function registerPlaidRoutes(
     const body = UserIdBody.safeParse(req.body);
     if (!body.success) {
       return reply.code(400).send({
-        standing: "I need a user_id (uuid) to make a link token.",
+        standing: "I couldn't read that request.",
         issues: body.error.format(),
       });
+    }
+
+    const userId = req.user?.id ?? body.data.user_id;
+    if (!userId) {
+      return reply.code(401).send({
+        standing: "I need a signed-in session to link a bank account.",
+      });
+    }
+    if (!req.user?.id && body.data.user_id) {
+      req.log.warn("deprecated: body.user_id passed without JWT; pass JWT instead");
     }
 
     try {
       const plaid = getPlaidClient();
       const resp = await plaid.linkTokenCreate({
-        user: { client_user_id: body.data.user_id },
+        user: { client_user_id: userId },
         client_name: "June",
         products: toProducts(plaidProducts()),
         country_codes: toCountryCodes(plaidCountryCodes()),
@@ -316,9 +328,19 @@ export async function registerPlaidRoutes(
     const body = ExchangeBody.safeParse(req.body);
     if (!body.success) {
       return reply.code(400).send({
-        standing: "I need a user_id and a public_token to exchange.",
+        standing: "I need a public_token to exchange.",
         issues: body.error.format(),
       });
+    }
+
+    const userId = req.user?.id ?? body.data.user_id;
+    if (!userId) {
+      return reply.code(401).send({
+        standing: "I need a signed-in session to finish linking that account.",
+      });
+    }
+    if (!req.user?.id && body.data.user_id) {
+      req.log.warn("deprecated: body.user_id passed without JWT; pass JWT instead");
     }
 
     try {
@@ -353,7 +375,7 @@ export async function registerPlaidRoutes(
          on conflict (plaid_item_id) do update
            set access_token_encrypted = excluded.access_token_encrypted,
                institution_name       = excluded.institution_name`,
-        [body.data.user_id, itemId, encrypted, institutionName]
+        [userId, itemId, encrypted, institutionName]
       );
 
       return reply.send({ ok: true, item_id: itemId });
@@ -372,13 +394,23 @@ export async function registerPlaidRoutes(
     const body = UserIdBody.safeParse(req.body);
     if (!body.success) {
       return reply.code(400).send({
-        standing: "I need a user_id to sync.",
+        standing: "I couldn't read that request.",
         issues: body.error.format(),
       });
     }
 
+    const userId = req.user?.id ?? body.data.user_id;
+    if (!userId) {
+      return reply.code(401).send({
+        standing: "I need a signed-in session to sync.",
+      });
+    }
+    if (!req.user?.id && body.data.user_id) {
+      req.log.warn("deprecated: body.user_id passed without JWT; pass JWT instead");
+    }
+
     try {
-      const result = await syncForUser(body.data.user_id);
+      const result = await syncForUser(userId);
       return reply.send(result);
     } catch (err) {
       req.log.error({ err }, "plaid sync failed");
