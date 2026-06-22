@@ -44,17 +44,25 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^5.0.0
   flutter_native_splash: ^2.4.0
+  flutter_launcher_icons: ^0.14.1
 
 # Generated native splash. Run `dart run flutter_native_splash:create` after
-# changing values here. Background color is intentionally a neutral cream that
-# reads OK against all three theme palettes (calm / bold / warm); regenerate
-# if you commit to a single palette for ship.
+# changing values here. Master image lives at assets/splash/june_logo.png
+# (copied from the brand kit at mobile/assets/brand/splash/splash-1152.png).
 flutter_native_splash:
   color: "#FAF5EE"
   image: assets/splash/june_logo.png
   android_12:
     color: "#FAF5EE"
     image: assets/splash/june_logo.png
+
+# App icon generation. Master is the 1024×1024 ink-bg tile from the brand kit.
+# Run `dart run flutter_launcher_icons` to regenerate all iOS + Android sizes.
+flutter_launcher_icons:
+  android: true
+  ios: true
+  remove_alpha_ios: true
+  image_path: "assets/brand/icon/icon-1024.png"
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
