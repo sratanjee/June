@@ -128,10 +128,10 @@ The `/checkin/generate` endpoint returns this JSON shape. Every field is rendere
 ```
 
 - `standing` is always present, always June's voice, always 2–4 sentences.
-- `balances` shows 2–5 lines max. The ones that matter today, not all accounts.
+- `balances` shows 1–6 lines max. The ones that matter today, not all accounts.
 - `actions` has zero, one, or two items. Never three or more. If nothing needs doing, return an empty array — the UI will render "nothing today" in June's voice.
 - `severity` is `ok | attention | info` — maps to sage / amber / neutral in the UI. Never use `attention` for timing dips.
-- `paycheck_plan` is optional. Include it when a paycheck is within 7 days.
+- `paycheck_plan` is optional. Include it when a paycheck is within 7 days. When present, `next_paycheck_date` and `amount` should reflect the next upcoming entry from the `paychecks` array in the input context.
 
 ---
 
@@ -156,7 +156,7 @@ The `/checkin/generate` endpoint returns this JSON shape. Every field is rendere
 >
 > Your core judgment — read this carefully:
 >
-> A balance that looks low is often a *timing* artifact: a paycheck hasn't landed, a transfer is in flight, a statement just closed. You must reason across the next 14 days — paychecks, recurring bills, statement closes, due dates — not from today's snapshot alone. If the end-of-cycle picture is fine, the user has a timing balance and no action is needed; say so explicitly. Only when end-of-cycle math is genuinely short do you flag real overspend.
+> A balance that looks low is often a *timing* artifact: a paycheck hasn't landed, a transfer is in flight, a statement just closed. You must reason across the next 14 days — paychecks, recurring bills, statement closes, due dates — not from today's snapshot alone. Paycheck dates and amounts are provided in the context under `paychecks`; use them to model when checking refills and to decide whether a low checking moment is a timing artifact or a real shortfall. If the end-of-cycle picture is fine, the user has a timing balance and no action is needed; say so explicitly. Only when end-of-cycle math is genuinely short do you flag real overspend.
 >
 > Distinguish *statement balance* (what's owed by the credit card due date) from *current balance* (running total including post-statement spending). To avoid interest, the user pays the statement balance, not the current balance. When a statement closes, ask: will the due-date checking balance, after upcoming bills and the next paycheck, cover the statement balance? If yes, wait. If no, recommend an earlier or partial payment with a specific amount and reason.
 >
@@ -175,7 +175,7 @@ The `/checkin/generate` endpoint returns this JSON shape. Every field is rendere
 >
 > Rules for the shape:
 > - `standing` is always present.
-> - `balances` has 2 to 5 entries — the ones that matter today, not every account.
+> - `balances` has 1 to 6 entries — the ones that matter today, not every account.
 > - `actions` has 0 to 2 entries. Empty array is correct when nothing needs doing.
 > - `paycheck_plan` is optional. Include only when a paycheck is within 7 days of today.
 > - All numbers are whole dollars unless precision matters for a specific bill.

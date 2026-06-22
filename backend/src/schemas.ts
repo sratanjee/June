@@ -77,6 +77,11 @@ export const InlineFinancialContext = z.object({
     category: z.string(),
     monthly_amount_cents: z.number().int().nonnegative(),
   })).default([]),
+  paychecks: z.array(z.object({
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    amount_cents: z.number().int().positive(),
+    recurrence: z.enum(["weekly", "biweekly", "semimonthly", "monthly"]).nullable().optional(),
+  })).default([]),
 });
 
 export const GenerateCheckInRequest = z.object({
@@ -94,8 +99,8 @@ export const CheckInResponse = z.object({
         subtext: z.string().optional(),
       })
     )
-    .min(2)
-    .max(5),
+    .min(1)
+    .max(6),
   actions: z
     .array(
       z.object({
@@ -120,3 +125,16 @@ export const CheckInResponse = z.object({
 });
 
 export type CheckInResponse = z.infer<typeof CheckInResponse>;
+
+export const ChatMessage = z.object({
+  role: z.enum(["user", "assistant"]),
+  text: z.string().min(1),
+});
+
+export const ChatRequest = z.object({
+  user_id: z.string().uuid(),
+  today: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  context: InlineFinancialContext,
+  history: z.array(ChatMessage).default([]),
+  message: z.string().min(1).max(4000),
+});

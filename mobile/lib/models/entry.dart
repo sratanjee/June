@@ -62,3 +62,31 @@ class GoalEntry {
     required this.kind,
   });
 }
+
+enum PaycheckRecurrence { weekly, biweekly, semimonthly, monthly }
+
+extension PaycheckRecurrenceX on PaycheckRecurrence {
+  String get wire => switch (this) {
+        PaycheckRecurrence.weekly => 'weekly',
+        PaycheckRecurrence.biweekly => 'biweekly',
+        PaycheckRecurrence.semimonthly => 'semimonthly',
+        PaycheckRecurrence.monthly => 'monthly',
+      };
+  String get label => switch (this) {
+        PaycheckRecurrence.weekly => 'Weekly',
+        PaycheckRecurrence.biweekly => 'Every 2 weeks',
+        PaycheckRecurrence.semimonthly => 'Twice a month',
+        PaycheckRecurrence.monthly => 'Monthly',
+      };
+}
+
+class PaycheckEntry {
+  final DateTime date;
+  final int amountCents;
+  final PaycheckRecurrence? recurrence;
+  PaycheckEntry({
+    required this.date,
+    required this.amountCents,
+    this.recurrence,
+  });
+}

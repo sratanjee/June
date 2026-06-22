@@ -3,6 +3,8 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { loadSystemPrompt } from "./prompt.js";
 import { registerCheckInRoutes } from "./routes/checkin.js";
+import { registerPlaidRoutes } from "./routes/plaid.js";
+import { registerChatRoutes } from "./routes/chat.js";
 
 async function main() {
   const systemPrompt = await loadSystemPrompt();
@@ -16,6 +18,8 @@ async function main() {
   app.get("/health", async () => ({ ok: true }));
 
   await registerCheckInRoutes(app, { systemPrompt });
+  await registerPlaidRoutes(app, { systemPrompt });
+  await registerChatRoutes(app, { systemPrompt });
 
   const port = Number(process.env.PORT ?? 4000);
   const host = process.env.HOST ?? "0.0.0.0";
