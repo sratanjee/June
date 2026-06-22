@@ -448,41 +448,93 @@ class _JuneBubbleBody extends StatelessWidget {
   final ChatMessage message;
   const _JuneBubbleBody({required this.message});
 
+  // Split a response into (verdict, supporting) at the end of the first
+  // sentence. Falls back to whole-text-as-verdict when there's no second
+  // sentence yet (short responses, mid-stream, single-clause answers).
+  static ({String verdict, String supporting}) _split(String raw) {
+    final t = raw.trim();
+    if (t.isEmpty) return (verdict: '', supporting: '');
+    final match = RegExp(r'^(.+?[\.\?\!])(\s+)(.+)$', dotAll: true).firstMatch(t);
+    if (match == null) return (verdict: t, supporting: '');
+    final verdict = match.group(1)!.trim();
+    final supporting = match.group(3)!.trim();
+    // If the verdict is suspiciously short (under ~12 chars) it's probably
+    // not a real verdict — bail and treat the whole thing as one block.
+    if (verdict.length < 12) return (verdict: t, supporting: '');
+    return (verdict: verdict, supporting: supporting);
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Lora serif on inkNavy, paper-color text. Matches _StandingCard.
-    final textStyle = GoogleFonts.lora(
-      fontSize: 16,
+    final verdictStyle = GoogleFonts.lora(
+      fontSize: 17,
       color: JuneColors.paper,
-      height: 1.45,
+      height: 1.35,
+      fontWeight: FontWeight.w600,
+      letterSpacing: -0.2,
+    );
+    final supportingStyle = GoogleFonts.inter(
+      fontSize: 14,
+      color: JuneColors.paper.withValues(alpha: 0.75),
+      height: 1.5,
       fontWeight: FontWeight.w400,
     );
 
-    // Empty + streaming = show just the pulsing dot so the bubble doesn't
-    // appear blank while we wait for the first delta.
     if (message.text.isEmpty && message.streaming) {
       return const _PulsingDot();
     }
 
-    if (!message.streaming) {
-      return Text(message.text, style: textStyle);
+    final split = _split(message.text);
+
+    if (split.supporting.isEmpty) {
+      // Single-sentence answer — render as verdict only. Add the streaming
+      // dot at the tail if we're still receiving.
+      if (message.streaming) {
+        return RichText(
+          text: TextSpan(
+            style: verdictStyle,
+            children: [
+              TextSpan(text: split.verdict),
+              const WidgetSpan(
+                alignment: PlaceholderAlignment.middle,
+                child: Padding(
+                  padding: EdgeInsets.only(left: 6),
+                  child: _PulsingDot(),
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+      return Text(split.verdict, style: verdictStyle);
     }
 
-    // Streaming with content: text plus inline dot at the end.
-    return RichText(
-      text: TextSpan(
-        style: textStyle,
-        children: [
-          TextSpan(text: message.text),
-          const WidgetSpan(
-            alignment: PlaceholderAlignment.middle,
-            child: Padding(
-              padding: EdgeInsets.only(left: 6),
-              child: _PulsingDot(),
+    // Two-part: serif verdict on top, sans supporting below.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(split.verdict, style: verdictStyle),
+        const SizedBox(height: 8),
+        if (message.streaming)
+          RichText(
+            text: TextSpan(
+              style: supportingStyle,
+              children: [
+                TextSpan(text: split.supporting),
+                const WidgetSpan(
+                  alignment: PlaceholderAlignment.middle,
+                  child: Padding(
+                    padding: EdgeInsets.only(left: 6),
+                    child: _PulsingDot(),
+                  ),
+                ),
+              ],
             ),
-          ),
-        ],
-      ),
+          )
+        else
+          Text(split.supporting, style: supportingStyle),
+      ],
     );
   }
 }
