@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
@@ -8,14 +7,13 @@ import '../auth/auth_service.dart';
 import '../models/chat.dart';
 import '../models/checkin.dart';
 
-// Phase 0 backend lives on the host machine. iOS sim sees the Mac at 127.0.0.1;
-// Android emulator uses 10.0.2.2. Override JUNE_API_BASE with --dart-define
-// when running on a real device on the same Wi-Fi.
+// Deployed backend on Fly.io. Override with --dart-define=JUNE_API_BASE=...
+// when iterating against a local backend (e.g. http://127.0.0.1:4000 for iOS
+// sim, http://10.0.2.2:4000 for Android emulator).
 String _defaultBase() {
   const fromEnv = String.fromEnvironment('JUNE_API_BASE');
   if (fromEnv.isNotEmpty) return fromEnv;
-  if (Platform.isAndroid) return 'http://10.0.2.2:4000';
-  return 'http://127.0.0.1:4000';
+  return 'https://june-jy5ddq.fly.dev';
 }
 
 // Phase 1: until real auth ships, the mobile app treats every linked account as
