@@ -37,17 +37,24 @@ dependencies:
   google_fonts: ^6.2.1
   shared_preferences: ^2.3.3
   plaid_flutter: ^5.1.1
+  supabase_flutter: ^2.5.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-
-  # The "flutter_lints" package below contains a set of recommended lints to
-  # encourage good coding practices. The lint set provided by the package is
-  # activated in the `analysis_options.yaml` file located at the root of your
-  # package. See that file for information about deactivating specific lint
-  # rules and activating additional ones.
   flutter_lints: ^5.0.0
+  flutter_native_splash: ^2.4.0
+
+# Generated native splash. Run `dart run flutter_native_splash:create` after
+# changing values here. Background color is intentionally a neutral cream that
+# reads OK against all three theme palettes (calm / bold / warm); regenerate
+# if you commit to a single palette for ship.
+flutter_native_splash:
+  color: "#FAF5EE"
+  image: assets/splash/june_logo.png
+  android_12:
+    color: "#FAF5EE"
+    image: assets/splash/june_logo.png
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

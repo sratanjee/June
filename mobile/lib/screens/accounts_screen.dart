@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
+import '../auth/auth_service.dart';
 import '../models/entry.dart';
 import '../storage/local_store.dart';
 import '../theme.dart';
@@ -67,6 +68,50 @@ class _AccountsScreenState extends State<AccountsScreen> {
     );
     // Re-hydrate when we come back, in case Plaid sync changed the local set.
     if (mounted) _hydrate();
+  }
+
+  Future<void> _confirmSignOut() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: JuneColors.paper,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+        ),
+        title: Text(
+          'Sign out?',
+          style: Theme.of(ctx).textTheme.headlineMedium,
+        ),
+        content: Text(
+          'Your local entries stay on this device.',
+          style: Theme.of(ctx).textTheme.bodyLarge?.copyWith(
+                color: JuneColors.neutralMuted,
+                height: 1.45,
+              ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            style: TextButton.styleFrom(
+              foregroundColor: JuneColors.neutralMuted,
+            ),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Sign out'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await AuthService.signOut();
+    } catch (_) {
+      // _Boot listens to auth state changes; if sign-out throws there's not
+      // much we can do here beyond leaving the user on this screen.
+    }
   }
 
   @override
@@ -179,6 +224,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
       bottomNavigationBar: _BottomCta(
         enabled: _loaded,
         onTap: _openLinkBank,
+        onSignOut: AuthService.configured ? _confirmSignOut : null,
       ),
     );
   }
@@ -543,7 +589,12 @@ class _PaycheckTile extends StatelessWidget {
 class _BottomCta extends StatelessWidget {
   final bool enabled;
   final VoidCallback onTap;
-  const _BottomCta({required this.enabled, required this.onTap});
+  final VoidCallback? onSignOut;
+  const _BottomCta({
+    required this.enabled,
+    required this.onTap,
+    this.onSignOut,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -556,10 +607,38 @@ class _BottomCta extends StatelessWidget {
         top: false,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
-          child: FilledButton.icon(
-            onPressed: enabled ? onTap : null,
-            icon: const Icon(Icons.add_link_rounded, size: 18),
-            label: const Text('Link another bank'),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              FilledButton.icon(
+                onPressed: enabled ? onTap : null,
+                icon: const Icon(Icons.add_link_rounded, size: 18),
+                label: const Text('Link another bank'),
+              ),
+              if (onSignOut != null) ...[
+                const SizedBox(height: 6),
+                TextButton.icon(
+                  onPressed: enabled ? onSignOut : null,
+                  icon: const Icon(
+                    Icons.logout_rounded,
+                    size: 16,
+                    color: JuneColors.neutralMuted,
+                  ),
+                  label: Text(
+                    'Sign out',
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: JuneColors.neutralMuted,
+                    ),
+                  ),
+                  style: TextButton.styleFrom(
+                    foregroundColor: JuneColors.neutralMuted,
+                    minimumSize: const Size.fromHeight(40),
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
       ),

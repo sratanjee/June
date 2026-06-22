@@ -1,7 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-class JuneColors {
+// ---------- PALETTE SWITCH ----------
+// Flip this single line to A/B/C between the visual options.
+//
+// JunePalette.calm  — Option 1: editorial calm (warm paper, deep ink navy,
+//                     muted sage / burnt amber). Personality-spec-native.
+// JunePalette.bold  — Option 2: bold fintech (pure white, pure black,
+//                     Cash App / Robinhood electric green, iOS orange).
+// JunePalette.warm  — Option 3: warm coral (cream paper, warm charcoal,
+//                     Airbnb coral attention, muted teal ok).
+//
+const JunePalette _palette = JunePalette.warm;
+
+enum JunePalette { calm, bold, warm }
+
+class _CalmPalette {
   static const inkNavy = Color(0xFF10182B);
   static const inkNavySoft = Color(0xFF2A3247);
   static const sage = Color(0xFF3B6D5E);
@@ -13,6 +27,92 @@ class JuneColors {
   static const neutralMuted = Color(0xFF6B6760);
   static const hairline = Color(0xFFE7E1D5);
   static const card = Color(0xFFFFFFFF);
+}
+
+class _BoldPalette {
+  static const inkNavy = Color(0xFF0A0A0A);       // true near-black
+  static const inkNavySoft = Color(0xFF1C1C1E);   // iOS dark surface
+  static const sage = Color(0xFF00C853);          // electric green
+  static const sageSurface = Color(0xFFE0FCE6);
+  static const amber = Color(0xFFFF9500);         // iOS orange
+  static const amberSurface = Color(0xFFFFF1DC);
+  static const paper = Color(0xFFFFFFFF);
+  static const paperShade = Color(0xFFF5F5F7);    // Apple silver
+  static const neutralMuted = Color(0xFF6E6E73);  // iOS neutral
+  static const hairline = Color(0xFFE5E5E7);
+  static const card = Color(0xFFFFFFFF);
+}
+
+class _WarmPalette {
+  static const inkNavy = Color(0xFF1F1816);       // warm charcoal (not navy, not black)
+  static const inkNavySoft = Color(0xFF3A2F2C);   // softer warm dark
+  static const sage = Color(0xFF4E9A8C);          // muted warm teal (savings, ok)
+  static const sageSurface = Color(0xFFDCEDE9);
+  static const amber = Color(0xFFE45D52);         // coral red — friendly attention
+  static const amberSurface = Color(0xFFFCE3DF);
+  static const paper = Color(0xFFFAF5EE);         // warm cream
+  static const paperShade = Color(0xFFF0E8DA);    // soft dust
+  static const neutralMuted = Color(0xFF7A6E66);  // warm gray
+  static const hairline = Color(0xFFE7DDCB);
+  static const card = Color(0xFFFFFCF6);          // cream white
+}
+
+class JuneColors {
+  static const inkNavy = _palette == JunePalette.bold
+      ? _BoldPalette.inkNavy
+      : (_palette == JunePalette.warm
+          ? _WarmPalette.inkNavy
+          : _CalmPalette.inkNavy);
+  static const inkNavySoft = _palette == JunePalette.bold
+      ? _BoldPalette.inkNavySoft
+      : (_palette == JunePalette.warm
+          ? _WarmPalette.inkNavySoft
+          : _CalmPalette.inkNavySoft);
+  static const sage = _palette == JunePalette.bold
+      ? _BoldPalette.sage
+      : (_palette == JunePalette.warm
+          ? _WarmPalette.sage
+          : _CalmPalette.sage);
+  static const sageSurface = _palette == JunePalette.bold
+      ? _BoldPalette.sageSurface
+      : (_palette == JunePalette.warm
+          ? _WarmPalette.sageSurface
+          : _CalmPalette.sageSurface);
+  static const amber = _palette == JunePalette.bold
+      ? _BoldPalette.amber
+      : (_palette == JunePalette.warm
+          ? _WarmPalette.amber
+          : _CalmPalette.amber);
+  static const amberSurface = _palette == JunePalette.bold
+      ? _BoldPalette.amberSurface
+      : (_palette == JunePalette.warm
+          ? _WarmPalette.amberSurface
+          : _CalmPalette.amberSurface);
+  static const paper = _palette == JunePalette.bold
+      ? _BoldPalette.paper
+      : (_palette == JunePalette.warm
+          ? _WarmPalette.paper
+          : _CalmPalette.paper);
+  static const paperShade = _palette == JunePalette.bold
+      ? _BoldPalette.paperShade
+      : (_palette == JunePalette.warm
+          ? _WarmPalette.paperShade
+          : _CalmPalette.paperShade);
+  static const neutralMuted = _palette == JunePalette.bold
+      ? _BoldPalette.neutralMuted
+      : (_palette == JunePalette.warm
+          ? _WarmPalette.neutralMuted
+          : _CalmPalette.neutralMuted);
+  static const hairline = _palette == JunePalette.bold
+      ? _BoldPalette.hairline
+      : (_palette == JunePalette.warm
+          ? _WarmPalette.hairline
+          : _CalmPalette.hairline);
+  static const card = _palette == JunePalette.bold
+      ? _BoldPalette.card
+      : (_palette == JunePalette.warm
+          ? _WarmPalette.card
+          : _CalmPalette.card);
 }
 
 ThemeData juneTheme() {

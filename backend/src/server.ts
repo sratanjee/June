@@ -2,6 +2,7 @@ import "dotenv/config";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { loadSystemPrompt } from "./prompt.js";
+import { registerAuth } from "./auth.js";
 import { registerCheckInRoutes } from "./routes/checkin.js";
 import { registerPlaidRoutes } from "./routes/plaid.js";
 import { registerChatRoutes } from "./routes/chat.js";
@@ -14,6 +15,8 @@ async function main() {
   });
 
   await app.register(cors, { origin: true });
+
+  await registerAuth(app);
 
   app.get("/health", async () => ({ ok: true }));
 
