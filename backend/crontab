@@ -1,0 +1,3 @@
+# Morning sync + check-in at 12:00 UTC (7am ET / 4am PT). User-local
+# timezones come later — for now everyone gets the same global tick.
+0 12 * * * curl -sf -X POST -H "x-job-key: $JOB_KEY" http://localhost:8080/jobs/morning-sync-and-checkin > /dev/null

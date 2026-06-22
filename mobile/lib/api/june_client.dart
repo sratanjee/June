@@ -38,6 +38,42 @@ class JuneClient {
     return headers;
   }
 
+  /// Latest persisted check-in for the authed user, or null if none yet.
+  ///
+  /// The backend daily cron pre-generates these; if the endpoint isn't
+  /// available yet (404), no row exists (204), or auth is missing, we return
+  /// null and the UI hides anything that depended on it.
+  Future<CheckIn?> fetchLatestCheckIn() async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/checkin/latest'),
+      headers: _authHeaders(),
+    );
+    if (res.statusCode == 204 || res.statusCode == 404) return null;
+    if (res.statusCode != 200) {
+      throw JuneApiException(res.statusCode, res.body);
+    }
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    return CheckIn.fromJson(json);
+  }
+
+  /// Register a device token for push notifications.
+  ///
+  /// Platform is 'ios' or 'android'. The token is the APNs device token on
+  /// iOS or the FCM registration token on Android. Idempotent on the backend.
+  Future<void> registerDevice({
+    required String platform,
+    required String token,
+  }) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/notifications/register'),
+      headers: _authHeaders(),
+      body: jsonEncode({'platform': platform, 'token': token}),
+    );
+    if (res.statusCode != 200) {
+      throw JuneApiException(res.statusCode, res.body);
+    }
+  }
+
   Future<CheckIn> generateCheckIn({
     required DateTime today,
     required Map<String, dynamic>? context,

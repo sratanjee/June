@@ -140,7 +140,7 @@ class _CheckInScreenState extends State<CheckInScreen> {
             final name = (widget.userName == null ||
                     widget.userName!.trim().isEmpty)
                 ? 'there'
-                : widget.userName!.trim();
+                : widget.userName!.trim().split(' ').first;
             final initials = (widget.userInitials == null ||
                     widget.userInitials!.trim().isEmpty)
                 ? initialsFromName(name)

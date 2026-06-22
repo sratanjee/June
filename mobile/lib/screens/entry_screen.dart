@@ -1,9 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
+import '../api/june_client.dart';
+import '../models/checkin.dart';
 import '../models/entry.dart';
+import '../notifications/notification_service.dart';
 import '../storage/local_store.dart';
 import '../theme.dart';
 import '../widgets/brand_mark.dart';
@@ -26,6 +31,16 @@ class _EntryScreenState extends State<EntryScreen> {
   String? _userName;
   bool _loaded = false;
 
+  // Latest persisted check-in from the backend's daily cron. Drives both the
+  // status pill and the bottom CTA copy. Null when:
+  //  - endpoint not yet deployed (404)
+  //  - no check-in for this user yet (204)
+  //  - network blip / unauth (we swallow and treat as null)
+  CheckIn? _latest;
+
+  // Shared client; reused for the latest-checkin fetch + push registration.
+  final JuneClient _client = JuneClient();
+
   // Collapse/expand per section. Defaults to expanded — first-time users
   // should see their data without an extra tap.
   bool _accountsOpen = true;
@@ -36,17 +51,30 @@ class _EntryScreenState extends State<EntryScreen> {
   void initState() {
     super.initState();
     _hydrate();
+    // Fire-and-forget: ask for push permission and register the device token
+    // with the backend. Failures are swallowed inside the service.
+    unawaited(NotificationService.registerIfPossible(_client));
   }
 
   Future<void> _hydrate() async {
     final stored = await LocalStore.load();
     final name = await LocalStore.loadUserName();
+    // Best-effort fetch of the most recent check-in. Anything other than a
+    // clean 200 (incl. backend not yet deployed) yields null and the pill
+    // stays hidden.
+    CheckIn? latest;
+    try {
+      latest = await _client.fetchLatestCheckIn();
+    } catch (_) {
+      latest = null;
+    }
     if (!mounted) return;
     setState(() {
       _accounts = List.of(stored.accounts);
       _goals = List.of(stored.goals);
       _paychecks = List.of(stored.paychecks);
       _userName = name;
+      _latest = latest;
       _loaded = true;
     });
   }
@@ -57,6 +85,25 @@ class _EntryScreenState extends State<EntryScreen> {
       goals: _goals,
       paychecks: _paychecks,
     );
+  }
+
+  // Single entry point for both the status pill and the bottom CTA. Pushes
+  // CheckInScreen with the current local entries, then re-hydrates so the
+  // pill / CTA reflect any new server-generated feeling on the way back.
+  Future<void> _openCheckIn() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => CheckInScreen(
+          accounts: _accounts,
+          goals: _goals,
+          paychecks: _paychecks,
+          userName: _userName,
+          userInitials:
+              _userName == null ? null : initialsFromName(_userName!),
+        ),
+      ),
+    );
+    if (mounted) _hydrate();
   }
 
   void _loadSample() {
@@ -128,6 +175,19 @@ class _EntryScreenState extends State<EntryScreen> {
                 if (mounted) _hydrate();
               },
             ),
+            // Status pill: only renders when we have a server-generated
+            // feeling. Tapping it pushes the regular CheckInScreen — same
+            // flow as the bottom CTA. (CheckInScreen still calls
+            // /checkin/generate today; threading the persisted one through is
+            // a later pass.)
+            if (_latest?.feeling != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
+                child: _StatusPill(
+                  feeling: _latest!.feeling!,
+                  onTap: _openCheckIn,
+                ),
+              ),
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 140),
@@ -275,20 +335,12 @@ class _EntryScreenState extends State<EntryScreen> {
       ),
       bottomNavigationBar: _BottomCta(
         enabled: _accounts.isNotEmpty,
-        onTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => CheckInScreen(
-                accounts: _accounts,
-                goals: _goals,
-                paychecks: _paychecks,
-                userName: _userName,
-                userInitials:
-                    _userName == null ? null : initialsFromName(_userName!),
-              ),
-            ),
-          );
-        },
+        // If the server already has a fresh feeling for today, nudge the copy
+        // away from "generate" toward "see" — both go to the same screen,
+        // but this discourages re-rolls.
+        hasFreshCheckIn:
+            _latest != null && _latest!.feeling != null,
+        onTap: _openCheckIn,
       ),
     );
   }
@@ -721,13 +773,104 @@ class _PaycheckTile extends StatelessWidget {
   }
 }
 
-class _BottomCta extends StatelessWidget {
-  final bool enabled;
+// One-line status indicator sitting between the greeting and the hero copy.
+// Quietly tells the user where today landed and gives a tap-through into
+// the full breakdown.
+class _StatusPill extends StatelessWidget {
+  final Feeling feeling;
   final VoidCallback onTap;
-  const _BottomCta({required this.enabled, required this.onTap});
+  const _StatusPill({required this.feeling, required this.onTap});
+
+  ({String copy, Color bg, Color dot}) _visuals() {
+    switch (feeling) {
+      case Feeling.green:
+        return (
+          copy: "You're green today.",
+          bg: JuneColors.sageSurface,
+          dot: JuneColors.sage,
+        );
+      case Feeling.attention:
+        return (
+          copy: 'Needs a look today.',
+          bg: JuneColors.amberSurface,
+          dot: JuneColors.amber,
+        );
+      case Feeling.quiet:
+        return (
+          copy: 'Quiet day.',
+          bg: JuneColors.paperShade,
+          dot: JuneColors.neutralMuted,
+        );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final v = _visuals();
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: v.bg,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: v.dot,
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                v.copy,
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: JuneColors.inkNavy,
+                ),
+              ),
+            ),
+            const Icon(
+              Icons.chevron_right_rounded,
+              size: 18,
+              color: JuneColors.neutralMuted,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BottomCta extends StatelessWidget {
+  final bool enabled;
+  final bool hasFreshCheckIn;
+  final VoidCallback onTap;
+  const _BottomCta({
+    required this.enabled,
+    required this.hasFreshCheckIn,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // When the server has a fresh feeling for today, swap the affordance from
+    // "generate" (sparkle) to "see" (forward arrow). Same destination either
+    // way — the copy just nudges the user away from re-rolling.
+    final icon = hasFreshCheckIn
+        ? Icons.arrow_forward_rounded
+        : Icons.auto_awesome_outlined;
+    final label = hasFreshCheckIn
+        ? "See today's check-in"
+        : 'Generate your check-in';
     return Container(
       decoration: const BoxDecoration(
         color: JuneColors.paper,
@@ -739,8 +882,8 @@ class _BottomCta extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
           child: FilledButton.icon(
             onPressed: enabled ? onTap : null,
-            icon: const Icon(Icons.auto_awesome_outlined, size: 18),
-            label: const Text("Generate your check-in"),
+            icon: Icon(icon, size: 18),
+            label: Text(label),
           ),
         ),
       ),

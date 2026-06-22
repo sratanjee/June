@@ -1,7 +1,12 @@
 import type { FastifyInstance } from "fastify";
 import { GenerateCheckInRequest } from "../schemas.js";
 import { generateCheckIn } from "../anthropic.js";
-import { loadFinancialContext, persistCheckIn } from "../db.js";
+import {
+  deriveFeeling,
+  loadFinancialContext,
+  loadLatestCheckin,
+  persistCheckIn,
+} from "../db.js";
 
 export async function registerCheckInRoutes(
   app: FastifyInstance,
@@ -82,10 +87,12 @@ export async function registerCheckInRoutes(
     try {
       const checkin = await generateCheckIn(opts.systemPrompt, today, context);
 
+      const feeling = deriveFeeling(checkin.actions);
+
       // Persist only for authenticated users. Demo-user calls stay ephemeral.
       if (authedUserId) {
         try {
-          await persistCheckIn(authedUserId, today, checkin);
+          await persistCheckIn(authedUserId, today, checkin, feeling);
         } catch (err) {
           // Don't fail the response if persistence trips — clients still
           // want the generated check-in.
@@ -93,13 +100,43 @@ export async function registerCheckInRoutes(
         }
       }
 
-      return reply.send(checkin);
+      return reply.send({ ...checkin, feeling });
     } catch (err) {
       req.log.error({ err }, "checkin generation failed");
       return reply.code(502).send({
         standing: "I'm having trouble thinking this through. Try again in a moment.",
         balances: [],
         actions: [],
+      });
+    }
+  });
+
+  // GET /checkin/latest — auth required. Returns the most recent checkins row
+  // for the authenticated user, or 204 No Content if none exist.
+  app.get("/checkin/latest", async (req, reply) => {
+    const user = req.user;
+    if (!user) {
+      return reply.code(401).send({
+        standing: "I need a signed-in session to fetch your check-in.",
+      });
+    }
+
+    try {
+      const latest = await loadLatestCheckin(user.id);
+      if (!latest) return reply.code(204).send();
+      return reply.send({
+        date: latest.date,
+        feeling: latest.feeling,
+        standing: latest.standing,
+        balances: latest.balances,
+        actions: latest.actions,
+        paycheck_plan: latest.paycheck_plan,
+        generated_at: latest.generated_at,
+      });
+    } catch (err) {
+      req.log.error({ err }, "checkin/latest failed");
+      return reply.code(500).send({
+        standing: "I couldn't pull your latest check-in. Try again in a moment.",
       });
     }
   });

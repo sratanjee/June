@@ -10,6 +10,8 @@ import { registerCheckInRoutes } from "./routes/checkin.js";
 import { registerPlaidRoutes } from "./routes/plaid.js";
 import { registerChatRoutes } from "./routes/chat.js";
 import { registerAccountRoutes } from "./routes/account.js";
+import { registerJobRoutes } from "./routes/jobs.js";
+import { registerNotificationRoutes } from "./routes/notifications.js";
 
 async function main() {
   const [checkInPrompt, chatPrompt] = await Promise.all([
@@ -31,6 +33,8 @@ async function main() {
   await registerPlaidRoutes(app, { systemPrompt: checkInPrompt });
   await registerChatRoutes(app, { systemPrompt: chatPrompt });
   await registerAccountRoutes(app);
+  await registerNotificationRoutes(app);
+  await registerJobRoutes(app, { systemPrompt: checkInPrompt });
 
   const port = Number(process.env.PORT ?? 4000);
   const host = process.env.HOST ?? "0.0.0.0";

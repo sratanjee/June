@@ -1,17 +1,40 @@
 // Hand-written Dart models matching the Zod schemas in backend/src/schemas.ts.
 // Single source of truth is the backend; this is the mirror.
 
+/// A coarse mood label produced server-side from the day's check-in.
+/// Drives the status pill on the entry screen.
+enum Feeling { green, attention, quiet }
+
+Feeling? _parseFeeling(dynamic raw) {
+  if (raw is! String) return null;
+  switch (raw) {
+    case 'green':
+      return Feeling.green;
+    case 'attention':
+      return Feeling.attention;
+    case 'quiet':
+      return Feeling.quiet;
+    default:
+      return null;
+  }
+}
+
 class CheckIn {
   final String standing;
   final List<BalanceLine> balances;
   final List<ActionItem> actions;
   final PaycheckPlan? paycheckPlan;
+  // Server-set mood label. Only populated by /checkin/latest today; the
+  // legacy /checkin/generate response may omit it, in which case this stays
+  // null and the UI treats it as "no pill".
+  final Feeling? feeling;
 
   CheckIn({
     required this.standing,
     required this.balances,
     required this.actions,
     this.paycheckPlan,
+    this.feeling,
   });
 
   factory CheckIn.fromJson(Map<String, dynamic> json) {
@@ -26,6 +49,7 @@ class CheckIn {
       paycheckPlan: json['paycheck_plan'] == null
           ? null
           : PaycheckPlan.fromJson(json['paycheck_plan'] as Map<String, dynamic>),
+      feeling: _parseFeeling(json['feeling']),
     );
   }
 }

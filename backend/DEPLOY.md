@@ -26,9 +26,19 @@ Runbook. Run from `/Users/sratanjee/June/backend`.
      PLAID_CLIENT_ID=... \
      PLAID_SECRET=... \
      PLAID_ENV=production \
-     DATABASE_URL=postgres://...
+     DATABASE_URL=postgres://... \
+     JOB_KEY=$(openssl rand -hex 24) \
+     PLAID_WEBHOOK_URL=https://june-jy5ddq.fly.dev/plaid/webhook
    ```
    List with `fly secrets list`. Update any value the same way; Fly restarts the machine.
+
+   **`JOB_KEY`** is the shared secret supercronic uses in the `x-job-key` header
+   when posting to `/jobs/morning-sync-and-checkin`. Generate fresh and treat
+   like any other API token.
+
+   **`PLAID_WEBHOOK_URL`** is the public URL Plaid posts webhooks to. The
+   `linkTokenCreate` call passes it through so every Item ends up wired to this
+   endpoint.
 
 ## Every deploy
 
@@ -40,6 +50,29 @@ fly deploy
 ```
 
 `June_Personality_Spec.md` inside `backend/` is git-ignored — re-copy before each deploy so the bundled spec stays in sync with the source.
+
+## Morning cron job
+
+The Docker image bakes in [supercronic](https://github.com/aptible/supercronic)
+plus the `crontab` file in this directory. `start.sh` backgrounds supercronic
+and execs the Node server, so a single Fly machine runs both. The schedule:
+
+```
+0 12 * * *   POST /jobs/morning-sync-and-checkin    # 12:00 UTC daily
+```
+
+To inspect cron behavior:
+
+```bash
+fly ssh console -C "ps aux | grep supercronic"
+fly logs                                          # supercronic logs to stdout
+```
+
+To kick the job manually (server-side):
+
+```bash
+fly ssh console -C "curl -sf -X POST -H \"x-job-key: $JOB_KEY\" http://localhost:8080/jobs/morning-sync-and-checkin"
+```
 
 ## Inspect
 

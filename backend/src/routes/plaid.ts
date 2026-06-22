@@ -1,4 +1,5 @@
-import type { FastifyInstance } from "fastify";
+import crypto from "node:crypto";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import {
   CountryCode,
@@ -83,7 +84,7 @@ function dateOrNull(value: string | null | undefined): string | null {
 
 // ---------- core sync (used by /plaid/sync AND the webhook) ----------
 
-async function syncForUser(userId: string): Promise<{
+export async function syncForUser(userId: string): Promise<{
   accounts: number;
   transactions: { added: number; modified: number; removed: number };
   cards: number;
@@ -272,6 +273,133 @@ async function upsertTransaction(
   );
 }
 
+// ---------- webhook JWT verification ----------
+//
+// Per Plaid docs (https://plaid.com/docs/api/webhooks/webhook-verification/):
+//  1. Decode `Plaid-Verification` header (a JWS, ES256, with `kid`).
+//  2. Fetch the JWK for that `kid` via /webhook_verification_key/get. Cache it.
+//  3. Verify signature using ES256 (P-256 ECDSA).
+//  4. Confirm `iat` is recent (< 5 minutes old).
+//  5. Confirm SHA-256 of the raw request body equals payload `request_body_sha256`.
+
+interface CachedKey {
+  key: crypto.KeyObject;
+  expiresAt: number; // ms epoch; 0 = no expiry yet (refresh on next miss)
+}
+const jwkCache = new Map<string, CachedKey>();
+
+function base64UrlDecode(input: string): Buffer {
+  const pad = input.length % 4 === 0 ? "" : "=".repeat(4 - (input.length % 4));
+  return Buffer.from(input.replace(/-/g, "+").replace(/_/g, "/") + pad, "base64");
+}
+
+function decodeJwtHeader(token: string): { alg: string; kid: string; typ?: string } {
+  const seg = token.split(".");
+  if (seg.length !== 3) throw new Error("malformed jwt");
+  const headerJson = base64UrlDecode(seg[0]).toString("utf8");
+  return JSON.parse(headerJson);
+}
+
+function decodeJwtPayload(token: string): Record<string, unknown> {
+  const seg = token.split(".");
+  if (seg.length !== 3) throw new Error("malformed jwt");
+  const payloadJson = base64UrlDecode(seg[1]).toString("utf8");
+  return JSON.parse(payloadJson);
+}
+
+async function getVerificationKey(kid: string): Promise<crypto.KeyObject> {
+  const cached = jwkCache.get(kid);
+  if (cached && (cached.expiresAt === 0 || cached.expiresAt > Date.now())) {
+    return cached.key;
+  }
+
+  const plaid = getPlaidClient();
+  const resp = await plaid.webhookVerificationKeyGet({ key_id: kid });
+  const jwk = resp.data.key;
+  if (!jwk || jwk.kty !== "EC" || jwk.crv !== "P-256") {
+    throw new Error(`unexpected JWK shape for kid=${kid}`);
+  }
+
+  // crypto.createPublicKey accepts a JWK directly (Node 18+).
+  const key = crypto.createPublicKey({
+    key: { kty: jwk.kty, crv: jwk.crv, x: jwk.x, y: jwk.y } as crypto.JsonWebKey,
+    format: "jwk",
+  });
+
+  // expired_at (Unix seconds) → ms. Null = currently active; re-pull occasionally
+  // via the 24-hour TTL we set ourselves so rotated keys don't stale forever.
+  const exp = jwk.expired_at != null ? jwk.expired_at * 1000 : Date.now() + 24 * 60 * 60 * 1000;
+  jwkCache.set(kid, { key, expiresAt: exp });
+  return key;
+}
+
+/**
+ * Verifies the Plaid-Verification JWT for a webhook request.
+ * Throws on any failure; returns void on success.
+ */
+async function verifyPlaidWebhook(
+  jwt: string,
+  rawBody: Buffer | string
+): Promise<void> {
+  const header = decodeJwtHeader(jwt);
+  if (header.alg !== "ES256") {
+    throw new Error(`unexpected alg: ${header.alg}`);
+  }
+  if (!header.kid) throw new Error("missing kid");
+
+  const key = await getVerificationKey(header.kid);
+
+  const [headerSeg, payloadSeg, sigSeg] = jwt.split(".");
+  const signingInput = Buffer.from(`${headerSeg}.${payloadSeg}`, "utf8");
+  const sigRaw = base64UrlDecode(sigSeg); // r || s, 64 bytes for P-256
+
+  // Node's verify wants DER for ECDSA by default — pass `dsaEncoding: "ieee-p1363"`
+  // so we can hand it the JOSE 64-byte concatenated form directly.
+  const verifier = crypto.createVerify("SHA256");
+  verifier.update(signingInput);
+  verifier.end();
+  const ok = verifier.verify(
+    { key, dsaEncoding: "ieee-p1363" },
+    sigRaw
+  );
+  if (!ok) throw new Error("signature verification failed");
+
+  const payload = decodeJwtPayload(jwt);
+
+  // iat must be within the last 5 minutes.
+  const iat = typeof payload.iat === "number" ? payload.iat : NaN;
+  if (!Number.isFinite(iat)) throw new Error("missing iat");
+  const ageSec = Math.floor(Date.now() / 1000) - iat;
+  if (ageSec > 5 * 60 || ageSec < -60) {
+    throw new Error(`iat outside acceptable window (age=${ageSec}s)`);
+  }
+
+  // Confirm the body SHA-256 matches.
+  const claimedHash = payload.request_body_sha256;
+  if (typeof claimedHash !== "string") throw new Error("missing request_body_sha256");
+  const bodyBuf = typeof rawBody === "string" ? Buffer.from(rawBody, "utf8") : rawBody;
+  const actualHash = crypto.createHash("sha256").update(bodyBuf).digest("hex");
+  if (actualHash !== claimedHash) {
+    throw new Error("request body hash mismatch");
+  }
+}
+
+declare module "fastify" {
+  interface FastifyRequest {
+    /** Raw request body bytes, captured by the Plaid webhook content-type parser. */
+    rawBody?: string;
+  }
+}
+
+function rawBodyFromRequest(req: FastifyRequest): string {
+  // Webhook route registers a custom content-type parser that pins the raw
+  // string to req.rawBody. Fall back to a re-serialization if absent (other
+  // routes don't capture raw bytes), but that path should never run for the
+  // signed webhook handler.
+  if (typeof req.rawBody === "string") return req.rawBody;
+  return JSON.stringify(req.body ?? {});
+}
+
 // ---------- routes ----------
 
 export async function registerPlaidRoutes(
@@ -302,12 +430,14 @@ export async function registerPlaidRoutes(
 
     try {
       const plaid = getPlaidClient();
+      const webhookUrl = process.env.PLAID_WEBHOOK_URL?.trim() || undefined;
       const resp = await plaid.linkTokenCreate({
         user: { client_user_id: userId },
         client_name: "June",
         products: toProducts(plaidProducts()),
         country_codes: toCountryCodes(plaidCountryCodes()),
         language: "en",
+        ...(webhookUrl ? { webhook: webhookUrl } : {}),
       });
       return reply.send({
         link_token: resp.data.link_token,
@@ -420,41 +550,92 @@ export async function registerPlaidRoutes(
     }
   });
 
-  // POST /plaid/webhook
-  app.post("/plaid/webhook", async (req, reply) => {
-    // Respond 200 first, do work after — Plaid retries on slow responses.
-    reply.code(200).send({ ok: true });
-
-    if (!plaidConfigured) return;
-
-    const parsed = WebhookBody.safeParse(req.body);
-    if (!parsed.success) return;
-
-    const { webhook_type, webhook_code, item_id } = parsed.data;
-
-    if (webhook_type === "TRANSACTIONS" && webhook_code === "SYNC_UPDATES_AVAILABLE") {
-      if (!item_id) return;
+  // Capture raw body bytes for the webhook route so we can hash them for
+  // signature verification. Scoped to application/json so it doesn't disturb
+  // other routes. Uses a route-level config flag (`config.rawBody = true`) to
+  // gate the behavior.
+  app.addContentTypeParser(
+    "application/json",
+    { parseAs: "string" },
+    (req, body: string, done) => {
       try {
-        const row = await pool.query<{ user_id: string }>(
-          `select user_id from plaid_items where plaid_item_id = $1`,
-          [item_id]
-        );
-        if (row.rows[0]) {
-          // Fire-and-forget; we already replied 200.
-          await syncForUser(row.rows[0].user_id);
+        const cfg = req.routeOptions?.config as { rawBody?: boolean } | undefined;
+        if (cfg?.rawBody) {
+          req.rawBody = body;
         }
+        const json = body.length > 0 ? JSON.parse(body) : {};
+        done(null, json);
       } catch (err) {
-        req.log.error({ err, item_id }, "plaid webhook sync failed");
+        done(err as Error, undefined);
       }
-      return;
     }
+  );
 
-    if (webhook_type === "ITEM" && webhook_code === "ERROR") {
-      req.log.warn({ webhook: parsed.data }, "plaid item error webhook");
-      return;
+  // POST /plaid/webhook — verified via JWT before any side effects.
+  app.post(
+    "/plaid/webhook",
+    { config: { rawBody: true } },
+    async (req, reply) => {
+      if (!plaidConfigured) {
+        // Without Plaid creds we can't verify the JWK; refuse silently.
+        return reply.code(503).send({ ok: false });
+      }
+
+      const verificationHeader = req.headers["plaid-verification"];
+      const jwt = Array.isArray(verificationHeader)
+        ? verificationHeader[0]
+        : verificationHeader;
+      if (!jwt) {
+        req.log.warn("plaid webhook missing Plaid-Verification header");
+        return reply.code(401).send({ ok: false });
+      }
+
+      try {
+        await verifyPlaidWebhook(jwt, rawBodyFromRequest(req));
+      } catch (err) {
+        req.log.warn({ err }, "plaid webhook verification failed");
+        return reply.code(401).send({ ok: false });
+      }
+
+      // Respond 200 now; Plaid retries on slow responses. Do real work after.
+      reply.code(200).send({ ok: true });
+
+      const parsed = WebhookBody.safeParse(req.body);
+      if (!parsed.success) return;
+
+      const { webhook_type, webhook_code, item_id } = parsed.data;
+
+      // Both SYNC_UPDATES_AVAILABLE and INITIAL_UPDATE want an immediate sync
+      // for the affected item.
+      if (
+        webhook_type === "TRANSACTIONS" &&
+        (webhook_code === "SYNC_UPDATES_AVAILABLE" ||
+          webhook_code === "INITIAL_UPDATE" ||
+          webhook_code === "HISTORICAL_UPDATE" ||
+          webhook_code === "DEFAULT_UPDATE")
+      ) {
+        if (!item_id) return;
+        try {
+          const row = await pool.query<{ user_id: string }>(
+            `select user_id from plaid_items where plaid_item_id = $1`,
+            [item_id]
+          );
+          if (row.rows[0]) {
+            await syncForUser(row.rows[0].user_id);
+          }
+        } catch (err) {
+          req.log.error({ err, item_id }, "plaid webhook sync failed");
+        }
+        return;
+      }
+
+      if (webhook_type === "ITEM" && webhook_code === "ERROR") {
+        req.log.warn({ webhook: parsed.data }, "plaid item error webhook");
+        return;
+      }
+
+      // Any other webhook: just log so we know it arrived.
+      req.log.info({ webhook: parsed.data }, "plaid webhook received");
     }
-
-    // Any other webhook: just log at debug so we know it arrived.
-    req.log.info({ webhook: parsed.data }, "plaid webhook received");
-  });
+  );
 }
